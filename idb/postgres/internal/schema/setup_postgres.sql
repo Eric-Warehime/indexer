@@ -10,32 +10,34 @@ CREATE TABLE IF NOT EXISTS block_header (
 );
 
 -- For looking round by timestamp. We could replace this with a round-to-timestamp algorithm, it should be extremely
--- efficient since there is such a high correlation between round and time.
+-- efficient since there is such a high correCREATE TABLE IF NOT EXISTS txn (
+--   round bigint NOT NULL,
+--   intra integer NOT NULL,
+--   typeenum smallint NOT NULL,
+--   asset bigint NOT NULL, -- 0=Algos, otherwise AssetIndex
+--   txid bytea, -- base32 of [32]byte hash, or NULL for inner transactions.
+--   txn jsonb NOT NULL, -- json encoding of signed txn with apply data; inner txns exclude nested inner txns
+--   extra jsonb NOT NULL,
+--   PRIMARY KEY (round, intra )
+-- ) PARTITION BY range(round);
+--
+--
+-- do $$
+-- begin
+-- EXECUTE format('CREATE TABLE IF NOT EXISTS txn_0 partition of txn FOR VALUES FROM (0) TO (10000000);');
+-- EXECUTE format('CREATE TABLE IF NOT EXISTS txn_1 partition of txn FOR VALUES FROM (10000000) TO (20000000);');
+-- EXECUTE format('CREATE TABLE IF NOT EXISTS txn_2 partition of txn FOR VALUES FROM (20000000) TO (30000000);');
+-- EXECUTE format('CREATE TABLE IF NOT EXISTS txn_3 partition of txn FOR VALUES FROM (30000000) TO (40000000);');
+-- EXECUTE format('CREATE TABLE IF NOT EXISTS txn_4 partition of txn FOR VALUES FROM (40000000) TO (50000000);');
+-- EXECUTE format('CREATE TABLE IF NOT EXISTS txn_5 partition of txn FOR VALUES FROM (50000000) TO (60000000);');
+-- EXECUTE format('CREATE TABLE IF NOT EXISTS txn_6 partition of txn FOR VALUES FROM (60000000) TO (70000000);');
+-- for i in 0..6 loop
+--    EXECUTE format(' CREATE INDEX IF NOT EXISTS %s ON %s ( txid );', 'txn_by_tixid_' || i,'txn_' || i);
+-- 	i:= i + 1;
+-- end loop;
+-- end; $$;lation between round and time.
 CREATE INDEX IF NOT EXISTS block_header_time ON block_header (realtime);
 
-CREATE TABLE IF NOT EXISTS txn (
-  round bigint NOT NULL,
-  intra integer NOT NULL,
-  typeenum smallint NOT NULL,
-  asset bigint NOT NULL, -- 0=Algos, otherwise AssetIndex
-  txid bytea, -- base32 of [32]byte hash, or NULL for inner transactions.
-  txn jsonb NOT NULL, -- json encoding of signed txn with apply data; inner txns exclude nested inner txns
-  extra jsonb NOT NULL,
-  PRIMARY KEY (round, intra )
-) PARTITION BY hash(round, intra);
-
-
-do $$
-declare
-n integer := 13;
-begin
-for i in 0..12 loop
-   EXECUTE format('CREATE TABLE IF NOT EXISTS %s partition of txn for values with (modulus %s, remainder %s);', 'txn_' || i, n, i);
-   -- For transaction lookup
-   EXECUTE format(' CREATE INDEX IF NOT EXISTS %s ON %s ( txid );', 'txn_by_tixid_' || i,'txn_' || i);
-	i:= i + 1;
-end loop;
-end; $$;
 
 
 -- Optional, to make txn queries by asset fast:
