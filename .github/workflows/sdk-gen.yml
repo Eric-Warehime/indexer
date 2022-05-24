@@ -1,0 +1,20 @@
+on:
+  push:
+    branches:
+      - 'develop'
+    paths:
+      - '**indexer.oas2.json'
+name: "Sdk Generation"
+description: "Uses models to run SDK code generation and cut a PR in case of changes."
+inputs:
+  sdk:
+    description: "Which SDK to generate."
+    required: true
+    default: "ALL"
+runs:
+  using: "docker"
+  image: "Dockerfile"
+  args:
+    - ${{ -k inputs.sdk}}
+  env:
+    GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
