@@ -1,9 +1,3 @@
-on:
-  push:
-    branches:
-      - 'sdk-generation'
-    paths:
-      - '**indexer.oas2.json'
 name: "Sdk Generation"
 description: "Uses models to run SDK code generation and cut a PR in case of changes."
 inputs:

@@ -1,0 +1,14 @@
+name: "SDK Code Generation"
+on:
+  push:
+    branches:
+      - 'sdk-generation'
+    paths:
+      - '**indexer.oas2.json'
+jobs:
+  generate_and_pr:
+    runs-on: ubuntu-latest
+    steps:
+      - name: generate_and_pr
+        uses: ./.github/actions/sdk-codegen
+        id: sdk-gen
