@@ -14,4 +14,4 @@ jobs:
       - name: Generate and PR
         uses: ./.github/actions/sdk-codegen/
         with:
-          sdk: ALL
+          args: "-k ALL"

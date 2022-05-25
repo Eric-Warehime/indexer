@@ -4,7 +4,6 @@ set -e
 function help() {
   echo "Entry point of our sdk code gen container."
   echo "-k|--sdk             - Which sdk to generate (GO,JS,JAVA,ALL)"
-  echo "[-pr|--pull-request] - Generate a PR if there is a diff."
   exit
 }
 
@@ -12,9 +11,6 @@ PARAMS=""
 
 while (( "$#" )); do
   case "$1" in
-    -pr|--pull-request)
-      PULL_REQUEST=1
-      ;;
     -k|--sdk)
       shift
       SDK=$1
