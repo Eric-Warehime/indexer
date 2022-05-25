@@ -10,5 +10,5 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: generate_and_pr
-        uses: "./.github/actions/sdk-codegen/"
+        uses: "./.github/actions/sdk-codegen/sdk-gen"
         id: sdk-gen
