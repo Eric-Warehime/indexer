@@ -4,11 +4,10 @@ inputs:
   sdk:
     description: "Which SDK to generate."
     required: true
-    default: "ALL"
 runs:
   using: "docker"
   image: "Dockerfile"
   args:
-    - ${{ -k inputs.sdk}}
+    - "-k ${{ inputs.sdk }}"
   env:
     GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
