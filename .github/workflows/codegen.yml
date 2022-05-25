@@ -6,7 +6,7 @@ on:
     paths:
       - '**indexer.oas2.json'
 permissions:
-  contents: read
+  contents: write
   pull-requests: write
 jobs:
   generate_and_pr:
