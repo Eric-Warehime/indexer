@@ -9,6 +9,7 @@ jobs:
   generate_and_pr:
     runs-on: ubuntu-latest
     steps:
-      - name: generate_and_pr
-        uses: "./.github/actions/sdk-codegen/sdk-gen"
-        id: sdk-gen
+      - name: Check out repository
+        uses: actions/checkout@v3
+      - name: Generate and PR
+        uses: ./.github/actions/sdk-codegen/
