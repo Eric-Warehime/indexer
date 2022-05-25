@@ -20,8 +20,6 @@ RUN mkdir $GH_DIR \
 # ------------------------------------
 # GitHub username
 ENV GITHUB_USER="codegen-user"
-# GitHub access token
-ENV GITHUB_TOKEN=""
 # GitHub email
 ENV GITHUB_EMAIL="codegen@algorand.com"
 # SDK repository in OWNER/REPO format
