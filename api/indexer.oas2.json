@@ -4,7 +4,7 @@
   ],
   "swagger": "2.0",
   "info": {
-    "description": "Algorand ledger analytics API.",
+    "description": "Algorand ledger analytics API. foobar",
     "title": "Indexer",
     "contact": {
       "name": "Algorand",
