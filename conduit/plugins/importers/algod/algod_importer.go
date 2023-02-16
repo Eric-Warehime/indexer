@@ -4,6 +4,7 @@ import (
 	"context"
 	_ "embed" // used to embed config
 	"fmt"
+	"github.com/algorand/go-algorand-sdk/v2/client/v2/common/models"
 	"net/url"
 	"reflect"
 	"time"
@@ -37,18 +38,19 @@ const (
 
 // Retry w/ exponential backoff
 const (
-	initialWait    = time.Millisecond * 200
+	initialWait    = time.Millisecond * 50
 	waitMultiplier = 1.5
 	retries        = 5
 )
 
 type algodImporter struct {
-	aclient *algod.Client
-	logger  *logrus.Logger
-	cfg     Config
-	ctx     context.Context
-	cancel  context.CancelFunc
-	mode    int
+	aclient  *algod.Client
+	logger   *logrus.Logger
+	cfg      Config
+	ctx      context.Context
+	cancel   context.CancelFunc
+	mode     int
+	statusCh chan models.NodeStatus
 }
 
 //go:embed sample.yaml
@@ -88,6 +90,7 @@ func init() {
 func (algodImp *algodImporter) Init(ctx context.Context, cfg plugins.PluginConfig, logger *logrus.Logger) (*sdk.Genesis, error) {
 	algodImp.ctx, algodImp.cancel = context.WithCancel(ctx)
 	algodImp.logger = logger
+	algodImp.statusCh = make(chan models.NodeStatus)
 	err := cfg.UnmarshalConfig(&algodImp.cfg)
 	if err != nil {
 		return nil, fmt.Errorf("connect failure in unmarshalConfig: %v", err)
@@ -156,52 +159,79 @@ func (algodImp *algodImporter) Close() error {
 	return nil
 }
 
-func (algodImp *algodImporter) GetBlock(rnd uint64) (data.BlockData, error) {
+func (algodImp *algodImporter) waitForRound(ctx context.Context, rnd uint64) {
+	for {
+		if ctx.Err() != nil {
+			return
+		}
+		if ns, err := algodImp.aclient.StatusAfterBlock(rnd).Do(ctx); err != nil {
+			algodImp.statusCh <- ns
+			return
+		}
+	}
+}
+
+func (algodImp *algodImporter) fetchRound(rnd uint64) (data.BlockData, error) {
 	var blockbytes []byte
 	var err error
 	var blk data.BlockData
 
-	for r := 0; r < retries; r++ {
-		time.Sleep(time.Duration(waitMultiplier*float64(r)) * initialWait)
-		// If context has expired.
-		if algodImp.ctx.Err() != nil {
-			return blk, fmt.Errorf("GetBlock ctx error: %w", err)
-		}
-		start := time.Now()
-		blockbytes, err = algodImp.aclient.BlockRaw(rnd).Do(algodImp.ctx)
-		dt := time.Since(start)
-		getAlgodRawBlockTimeSeconds.Observe(dt.Seconds())
-		if err != nil {
-			algodImp.logger.Errorf(
-				"r=%d error getting block %d", r, rnd)
-			continue
-		}
-		tmpBlk := new(rpcs.EncodedBlockCert)
-		err = protocol.Decode(blockbytes, tmpBlk)
-		if err != nil {
-			return blk, err
-		}
+	start := time.Now()
+	blockbytes, err = algodImp.aclient.BlockRaw(rnd).Do(algodImp.ctx)
+	dt := time.Since(start)
+	getAlgodRawBlockTimeSeconds.Observe(dt.Seconds())
+	if err != nil {
+		algodImp.logger.Errorf(
+			"error getting block %d, %v", rnd, err)
+		return blk, err
+	}
+	tmpBlk := new(rpcs.EncodedBlockCert)
+	err = protocol.Decode(blockbytes, tmpBlk)
+	if err != nil {
+		return blk, err
+	}
 
-		if algodImp.mode == followerMode {
-			// We aren't going to do anything with the new delta until we get everything
-			// else converted over
-			// Round 0 has no delta associated with it
-			if rnd != 0 {
-				_, err = algodImp.aclient.GetLedgerStateDelta(rnd).Do(algodImp.ctx)
-				if err != nil {
-					algodImp.logger.Errorf(
-						"r=%d error getting delta %d", r, rnd)
-					continue
-				}
+	if algodImp.mode == followerMode {
+		// We aren't going to do anything with the new delta until we get everything
+		// else converted over
+		// Round 0 has no delta associated with it
+		if rnd != 0 {
+			_, err = algodImp.aclient.GetLedgerStateDelta(rnd).Do(algodImp.ctx)
+			if err != nil {
+				algodImp.logger.Errorf(
+					"error getting delta %d, %v", rnd, err)
+				return blk, err
 			}
 		}
+	}
 
-		blk = data.BlockData{
-			BlockHeader: tmpBlk.Block.BlockHeader,
-			Payset:      tmpBlk.Block.Payset,
-			Certificate: &tmpBlk.Certificate,
+	blk = data.BlockData{
+		BlockHeader: tmpBlk.Block.BlockHeader,
+		Payset:      tmpBlk.Block.Payset,
+		Certificate: &tmpBlk.Certificate,
+	}
+	return blk, err
+}
+
+func (algodImp *algodImporter) GetBlock(rnd uint64) (data.BlockData, error) {
+	var err error
+	var blk data.BlockData
+
+	waitCtx, waitCf := context.WithCancel(algodImp.ctx)
+	defer waitCf()
+	go algodImp.waitForRound(waitCtx, rnd)
+	for r := 0; r < retries; r++ {
+		select {
+		case <-algodImp.statusCh:
+			return algodImp.fetchRound(rnd)
+		case <-time.After(time.Duration(waitMultiplier*float64(r)) * initialWait):
+			blk, err = algodImp.fetchRound(rnd)
+			if err == nil {
+				return blk, err
+			}
+		case <-algodImp.ctx.Done():
+			return blk, fmt.Errorf("GetBlock ctx error: %w", err)
 		}
-		return blk, err
 	}
 	algodImp.logger.Error("GetBlock finished retries without fetching a block. Check that the indexer is set to start at a round that the current algod node can handle")
 	return blk, fmt.Errorf("finished retries without fetching a block. Check that the indexer is set to start at a round that the current algod node can handle")
