@@ -164,7 +164,7 @@ func (algodImp *algodImporter) waitForRound(ctx context.Context, rnd uint64) {
 		if ctx.Err() != nil {
 			return
 		}
-		if ns, err := algodImp.aclient.StatusAfterBlock(rnd).Do(ctx); err != nil {
+		if ns, err := algodImp.aclient.StatusAfterBlock(rnd - 1).Do(ctx); err != nil {
 			algodImp.statusCh <- ns
 			return
 		}
